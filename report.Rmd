@@ -1,0 +1,266 @@
+---
+title: "Dose-Response analysis (probit analysis)"
+output: html_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,error = FALSE, warning = FALSE)
+library(shiny)
+library(rmarkdown)
+library(knitr)
+library(kableExtra)
+library(dplyr)
+library(MASS)
+```
+```{r echo=FALSE, error=FALSE, message=FALSE, warning=FALSE, include=TRUE,warn.conflicts=FALSE}
+
+ csvfile <- reactive({
+    csvfile <- input$file1
+    if (is.null(csvfile)) {
+      return(NULL)
+    }
+    dt <- read.csv(csvfile$datapath, 
+                   header = input$header, 
+                   sep = ",",
+                   check.names = FALSE)
+    dt
+ })
+
+##### ANOVA TABLE
+  anovatable<-
+    eventReactive(input$submit, {
+      if (input$log_trans > 0) {
+        validate(
+          need(input$dose != input$response, "Warning 1: Both input variables selected (Dose and Response) are same. 
+               Choose Dose and Response column correctly above for meaningful result")
+        )
+        d <- as.data.frame(csvfile())
+        Dose<-d[,input$dose]
+        Response<-d[,input$response]
+        data<-as.data.frame(cbind(Dose,Response))
+        fit <- glm(
+          formula = Response ~ log10(Dose), family = binomial(link = "probit"),
+          data = data
+        )
+        result<-summary(fit)
+        anovatable<-result$coefficients
+        final<-as.data.frame(anovatable)
+        final
+      }
+      else{
+        validate(
+          need(input$dose != input$response, "Warning 1: Both input variables selected (Dose and Response) are same. 
+               Choose Dose and Response column correctly above for meaningful result")
+        )
+        d <- as.data.frame(csvfile())
+        Dose<-d[,input$dose]
+          Response<-d[,input$response]
+          data<-as.data.frame(cbind(Dose,Response))
+          fit <- glm(
+            formula = Response ~ Dose, family = binomial(link = "probit"),
+            data = data
+          )
+          result<-summary(fit)
+          anovatable<-result$coefficients
+          final<-as.data.frame(anovatable)
+          final
+          
+      }
+      
+    }
+    )
+
+#### Deviance measures
+  deviance<-
+    eventReactive(input$submit, {
+      if (input$log_trans > 0) {
+        validate(
+          need(input$dose != input$response, "")
+        )
+        d <- as.data.frame(csvfile())
+        Dose<-d[,input$dose]
+        Response<-d[,input$response]
+        data<-as.data.frame(cbind(Dose,Response))
+        fit <- glm(
+          formula = Response ~ log10(Dose), family = binomial(link = "probit"),
+          data = data
+        )
+        result<-summary(fit)
+        anovatable<-result$coefficients
+        anovatable<-result$coefficients
+        final<-as.data.frame(anovatable)
+        Res_Dev<-result$deviance
+        Null_Dev<-result$null.deviance
+        Res_DF<-result$df.residual
+        Null_DF<-result$df.null
+        
+        firstrow<-cbind(Null_Dev,Null_DF)
+        secrow<-cbind(Res_Dev,Res_DF)
+        final<-as.data.frame(rbind(firstrow,secrow))
+        colnames(final)<-c("Deviance","Degrees of freedom")
+        row.names(final)<-c("Null","Residual")
+        final
+      }
+      else{
+        validate(
+          need(input$dose != input$response, "")
+        )
+        d <- as.data.frame(csvfile())
+        Dose<-d[,input$dose]
+        Response<-d[,input$response]
+        data<-as.data.frame(cbind(Dose,Response))
+        fit <- glm(
+          formula = Response ~ Dose, family = binomial(link = "probit"),
+          data = data
+        )
+        result<-summary(fit)
+        anovatable<-result$coefficients
+        anovatable<-result$coefficients
+        final<-as.data.frame(anovatable)
+        Res_Dev<-result$deviance
+        Null_Dev<-result$null.deviance
+        Res_DF<-result$df.residual
+        Null_DF<-result$df.null
+        
+        firstrow<-cbind(Null_Dev,Null_DF)
+        secrow<-cbind(Res_Dev,Res_DF)
+        final<-as.data.frame(rbind(firstrow,secrow))
+        colnames(final)<-c("Deviance","Degrees of freedom")
+        row.names(final)<-c("Null","Residual")
+        final
+         }
+    })
+  
+ ### goodness of fit
+  goodness<-
+    eventReactive(input$submit, {
+      if (input$log_trans > 0) {
+        validate(
+          need(input$dose != input$response, "")
+        )
+        d <- as.data.frame(csvfile())
+        Dose<-d[,input$dose]
+        Response<-d[,input$response]
+        data<-as.data.frame(cbind(Dose,Response))
+        fit <- glm(
+          formula = Response ~ log10(Dose), family = binomial(link = "probit"),
+          data = data
+        )
+        result<-summary(fit)
+        DF<-result$df.residual
+        pearson<-sum(residuals(fit, type = "pearson")^2)
+        pval1<-pchisq(pearson, df=DF, lower.tail=FALSE)
+        deviance<-sum(residuals(fit, type = "deviance")^2)
+        pval2<-pchisq(deviance, df=DF, lower.tail=FALSE)
+        
+        row1<-cbind(round(pearson,4),DF,round(pval1,4))
+        row2<-cbind(round(deviance,4),DF,round(pval2,4))
+        resfinal<-rbind(row1,row2)
+        rownames(resfinal)<-c("pearson","Deviance")
+        colnames(resfinal)<-c("Chi square","DF","P-value")
+        resfinal
+      }
+      else{
+        validate(
+          need(input$dose != input$response, "")
+        )
+        d <- as.data.frame(csvfile())
+        Dose<-d[,input$dose]
+        Response<-d[,input$response]
+        data<-as.data.frame(cbind(Dose,Response))
+        fit <- glm(
+          formula = Response ~ Dose, family = binomial(link = "probit"),
+          data = data
+        )
+        result<-summary(fit)
+        DF<-result$df.residual
+        pearson<-sum(residuals(fit, type = "pearson")^2)
+        pval1<-pchisq(pearson, df=DF, lower.tail=FALSE)
+        deviance<-sum(residuals(fit, type = "deviance")^2)
+        pval2<-pchisq(deviance, df=DF, lower.tail=FALSE)
+        
+        row1<-cbind(round(pearson,4),DF,round(pval1,4))
+        row2<-cbind(round(deviance,4),DF,round(pval2,4))
+        resfinal<-rbind(row1,row2)
+        rownames(resfinal)<-c("pearson","Deviance")
+        colnames(resfinal)<-c("Chi square","DF","P-value")
+        resfinal
+      }
+    })
+  
+  #### LD50
+  LDvalue<-
+    eventReactive(input$submit, {
+      if (input$log_trans > 0) {
+        validate(
+          need(input$dose != input$response, "")
+        )
+        d <- as.data.frame(csvfile())
+        Dose<-d[,input$dose]
+        Response<-d[,input$response]
+        data<-as.data.frame(cbind(Dose,Response))
+        fit <- glm(
+          formula = Response ~ log10(Dose), family = binomial(link = "probit"),
+          data = data
+        )
+        LD_values<-dose.p(fit,p=c(0.5,0.9,0.95))
+        LD<-rbind(LD_values[1],LD_values[2],LD_values[3])
+        LD<-as.data.frame(LD)
+        SE<-unname(attributes(LD_values)$SE[, 1])
+        SE<-as.data.frame(SE)
+        org<-as.data.frame(round(10^LD, 3))
+        final<-cbind(LD,SE,org)
+        colnames(final)<-c("Dose(transformed values)","SE","Original Values")
+        row.names(final)<-c("LD50","LD90","LD95")
+        final
+      }
+      else{
+        validate(
+          need(input$dose != input$response, "")
+        )
+        d <- as.data.frame(csvfile())
+        Dose<-d[,input$dose]
+        Response<-d[,input$response]
+        data<-as.data.frame(cbind(Dose,Response))
+        fit <- glm(
+          formula = Response ~ Dose, family = binomial(link = "probit"),
+          data = data
+        )
+        LD_values<-dose.p(fit,p=c(0.5,0.9,0.95))
+        LD<-rbind(LD_values[1],LD_values[2],LD_values[3])
+        LD<-as.data.frame(LD)
+        SE<-unname(attributes(LD_values)$SE[, 1])
+        SE<-as.data.frame(SE)
+        final<-cbind(LD,SE)
+        colnames(final)<-c("Dose","SE")
+        row.names(final)<-c("LD50","LD90","LD95")
+        final
+        
+      }
+    })
+  
+ knitr::kable(anovatable(),digits = 3, caption = "Parameter Estimates",align = "c")%>%
+      kableExtra::kable_styling("bordered", full_width = F) %>% kable_paper("hover", full_width = F)
+ 
+ knitr::kable(deviance(),digits = 3, caption = "Deviance measures",align = "c")%>%
+      kableExtra::kable_styling("bordered", full_width = F) %>% kable_paper("hover", full_width = F)
+ 
+ knitr::kable(goodness(),digits = 3, caption = "Goodness of fit",align = "c")%>%
+      kableExtra::kable_styling("bordered", full_width = F) %>% kable_paper("hover", full_width = F) 
+ 
+  knitr::kable(LDvalue(),digits = 3, caption = "Goodness of fit",align = "c")%>%
+      kableExtra::kable_styling("bordered", full_width = F) %>% kable_paper("hover", full_width = F) 
+  
+```
+
+
+### Downloaded from grapesModeller
+
+### citation
+<style>
+body {
+text-align: justify}
+</style>
+Gopinath, P. P, Parsad, R, Joseph, B, Adarsh, V. S.,(2020). 
+        GRAPES: General Rshiny Based Analysis Platform Empowered by Statistics. 
+        https://www.kaugrapes.com/home. version 1.0.0.
+
