@@ -40,13 +40,16 @@ ui <- dashboardPage(
                icon = icon("list-alt")),
       menuItem("Linear Regression", tabName = "LR", 
                icon = icon("list-alt")),
-      menuItem("Non Linear models", 
+      menuItem("Dose-Response study", 
                icon = icon("list-alt"),
                menuItem("Probit Analysis", 
-                        tabName = "probit"),
+                        tabName = "probit")
+               ),
+      menuItem("Non-Linear models", 
+               icon = icon("list-alt"),
                menuItem("cobb douglas function", 
                         tabName = "CDF")
-               ),
+      ),
       menuItem("Time-series Models", tabName = "TSM", 
                icon = icon("list-alt")),
       tags$br(),
@@ -120,10 +123,15 @@ ui <- dashboardPage(
               tableOutput("deviance"), # design
               tags$style(type = "text/css", "#deviance th,td {border: medium solid #000000;text-align:center}"),
               tags$style(type = "text/css", "#deviance td {border: medium solid #000000;text-align:center}"),
+              tableOutput("goodness"), # design
+              tags$style(type = "text/css", "#goodness th,td {border: medium solid #000000;text-align:center}"),
+              tags$style(type = "text/css", "#goodness td {border: medium solid #000000;text-align:center}"),
               tableOutput("LD"),
               tags$style(type = "text/css", "#LD th,td {border: medium solid #000000;text-align:center}"),
               tags$style(type = "text/css", "#LD td {border: medium solid #000000;text-align:center}"),
               uiOutput("plotvars"),
+              tags$br(),
+              uiOutput("plotvars2"),
               tags$br(),
               plotOutput("plotout"),
               tags$br(),
@@ -357,6 +365,81 @@ server <- function(input, output, session) {
   rownames = TRUE
   )
   
+ ### goodness of fit
+  goodness<-
+    eventReactive(input$submit, {
+      if (input$log_trans > 0) {
+        validate(
+          need(input$dose != input$response, "")
+        )
+        d <- as.data.frame(csvfile())
+        Dose<-d[,input$dose]
+        Response<-d[,input$response]
+        data<-as.data.frame(cbind(Dose,Response))
+        fit <- glm(
+          formula = Response ~ log10(Dose), family = binomial(link = "probit"),
+          data = data
+        )
+        result<-summary(fit)
+        DF<-result$df.residual
+        pearson<-sum(residuals(fit, type = "pearson")^2)
+        pval1<-pchisq(pearson, df=DF, lower.tail=FALSE)
+        deviance<-sum(residuals(fit, type = "deviance")^2)
+        pval2<-pchisq(deviance, df=DF, lower.tail=FALSE)
+        
+        row1<-cbind(round(pearson,4),DF,round(pval1,4))
+        row2<-cbind(round(deviance,4),DF,round(pval2,4))
+        resfinal<-rbind(row1,row2)
+        rownames(resfinal)<-c("pearson","Deviance")
+        colnames(resfinal)<-c("Chi square","DF","P-value")
+        resfinal
+      }
+      else{
+        validate(
+          need(input$dose != input$response, "")
+        )
+        d <- as.data.frame(csvfile())
+        Dose<-d[,input$dose]
+        Response<-d[,input$response]
+        data<-as.data.frame(cbind(Dose,Response))
+        fit <- glm(
+          formula = Response ~ Dose, family = binomial(link = "probit"),
+          data = data
+        )
+        result<-summary(fit)
+        DF<-result$df.residual
+        pearson<-sum(residuals(fit, type = "pearson")^2)
+        pval1<-pchisq(pearson, df=DF, lower.tail=FALSE)
+        deviance<-sum(residuals(fit, type = "deviance")^2)
+        pval2<-pchisq(deviance, df=DF, lower.tail=FALSE)
+        
+        row1<-cbind(round(pearson,4),DF,round(pval1,4))
+        row2<-cbind(round(deviance,4),DF,round(pval2,4))
+        resfinal<-rbind(row1,row2)
+        rownames(resfinal)<-c("pearson","Deviance")
+        colnames(resfinal)<-c("Chi square","DF","P-value")
+        resfinal
+      }
+    })
+  
+  output$goodness <- renderTable({
+    goodness()
+  },
+  digits = 3,
+  caption = ("<b> Goodness of fit </b>"),
+  bordered = TRUE,
+  align = "c",
+  caption.placement = getOption("xtable.caption.placement", "top"),
+  rownames = TRUE
+  )
+  
+  
+  
+  
+  
+  
+  
+  
   #### LD50
   LDvalue<-
     eventReactive(input$submit, {
@@ -429,16 +512,111 @@ server <- function(input, output, session) {
           style = "minimal"
         )
       
-    })       
+    })
+  
+  plotvar2<-
+    eventReactive(input$submit_plot, {
+      list(
+      checkboxInput("ldline", "show LD 50 line on the plot", TRUE),
+      textInput("xlab", "Enter required x-axis label", "Dose Concentration"),
+      textInput("ylab", "Enter required y-axis label", "Response (in proportion)"),
+      textInput("title", "Give your plot title", "Dose-response curve"),
+      textInput("LD", "Give lethal dose label", "LD50 =")
+      )
+       })  
         
   output$plotvars <- renderUI({
     plotvar()
-  })      
+  })   
+  
+  output$plotvars2 <- renderUI({
+    plotvar2()
+  })  
   
 #### plotting
  
-   plotting<-
-    eventReactive(input$submit_plot, {
+  output$plotout <- renderPlot({
+    if (is.null(input$file1$datapath)) {
+      return()
+    }
+    if (is.null(input$submit_plot)) {
+      return()
+    }
+    if (is.null(input$ldline)) {
+      return()
+    }
+    if (is.null(input$log_trans)) {
+      return()
+    }
+
+    if (input$submit_plot>0){
+      if (input$log_trans>0){
+      d <- as.data.frame(csvfile())
+      Dose<-d[,input$dose]
+      Response<-d[,input$response]
+      data<-as.data.frame(cbind(Dose,Response))
+      fit <- glm(
+        formula = Response ~ log10(Dose), family = binomial(link = "probit"),
+        data = data
+      )
+      LD_values<-dose.p(fit,p=c(0.5,0.9,0.95))
+      LD<-rbind(LD_values[1],LD_values[2],LD_values[3])
+      LD<-as.data.frame(LD)
+      SE<-unname(attributes(LD_values)$SE[, 1])
+      SE<-as.data.frame(SE)
+      final<-cbind(LD,SE)
+    ld50val<-round(final[1,1],3)
+      textlabel<- paste(input$LD, ld50val)
+      
+      if (input$ldline>0){
+        p <- ggplot(
+          data = data, # specify the data frame with data
+          aes(x = log10(Dose), y = Response)
+        ) + # specify x and y
+          geom_point() + # make a scatter plot
+          ylim(0, 1.5) +
+          xlab(input$xlab) + # label x-axis
+          ylab(input$ylab) + # label y-axis
+          ggtitle(input$title) + # add a title
+          theme_bw() # a simple theme
+        
+        
+        # Add the line to graph
+        p <- p + geom_smooth(
+          method = "glm", method.args = list(family = binomial(link = "probit")),
+          fullrange = TRUE, se = FALSE
+        )
+        # Add the text with the LD50 to the graph.
+        p <- p + annotate(geom = "text", x = final[1,1], y = 1.25, label = textlabel, color = "black") 
+          
+        # add line LD_50
+        p <- p + geom_segment(aes(x = final[1,1], y = 0.00, xend = final[1,1], yend = 1), linetype = 2)
+        p
+      }
+      else{
+        p <- ggplot(
+          data = data, # specify the data frame with data
+          aes(x = log10(Dose), y = Response)
+        ) + # specify x and y
+          geom_point() + # make a scatter plot
+          ylim(0, 1.5) +
+          xlab(input$xlab) + # label x-axis
+          ylab(input$ylab) + # label y-axis
+          ggtitle(input$title) + # add a title
+          theme_bw() # a simple theme
+        
+        
+        # Add the line to graph
+        p <- p + geom_smooth(
+          method = "glm", method.args = list(family = binomial(link = "probit")),
+          fullrange = TRUE, se = FALSE
+        )
+        p 
+      }
+      
+      }
+    
+   else{
       d <- as.data.frame(csvfile())
       Dose<-d[,input$dose]
       Response<-d[,input$response]
@@ -453,36 +631,61 @@ server <- function(input, output, session) {
       SE<-unname(attributes(LD_values)$SE[, 1])
       SE<-as.data.frame(SE)
       final<-cbind(LD,SE)
+      ld50val<-round(final[1,1],3)
+      textlabel<- paste(input$LD, ld50val)
+      
+      if (input$ldline>0){
       p <- ggplot(
         data = data, # specify the data frame with data
         aes(x = Dose, y = Response)
       ) + # specify x and y
         geom_point() + # make a scatter plot
         ylim(0, 1.5) +
-        xlab("Dose concentration") + # label x-axis
-        ylab("Response(in proportion)") + # label y-axis
-        ggtitle("Dose-response curve") + # add a title
+        xlab(input$xlab) + # label x-axis
+        ylab(input$ylab) + # label y-axis
+        ggtitle(input$title) + # add a title
         theme_bw() # a simple theme
        
-      
+     
       # Add the line to graph
       p <- p + geom_smooth(
         method = "glm", method.args = list(family = binomial(link = "probit")),
         fullrange = TRUE, se = FALSE
       )
-      
       # Add the text with the LD50 to the graph.
-      p <- p + annotate(geom = "text", x = final[1,1], y = 1.25, label = "LD50: ", color = "black") +
-        annotate(geom = "text", x = (final[1,1]+5), y = 1.25, label = round(final[1,1],3), color = "black")
+      p <- p + annotate(geom = "text", x = final[1,1], y = 1.25, label = textlabel, color = "black") 
       
       # add line LD_50
       p <- p + geom_segment(aes(x = final[1,1], y = 0.00, xend = final[1,1], yend = 1), linetype = 2)
       p
-      }) 
+      }
+      else{
+        p <- ggplot(
+          data = data, # specify the data frame with data
+          aes(x = Dose, y = Response)
+        ) + # specify x and y
+          geom_point() + # make a scatter plot
+          ylim(0, 1.5) +
+          xlab(input$xlab) + # label x-axis
+          ylab(input$ylab) + # label y-axis
+          ggtitle(input$title) + # add a title
+          theme_bw() # a simple theme
+        
+        
+        # Add the line to graph
+        p <- p + geom_smooth(
+          method = "glm", method.args = list(family = binomial(link = "probit")),
+          fullrange = TRUE, se = FALSE
+        )
+        p 
+      }
+      
+      
+   }
+    }
+      
+      },bg="transparent") 
   
-   output$plotout <- renderPlot({
-     plotting()
-   })  
   
   
   
